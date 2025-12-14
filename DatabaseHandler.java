@@ -11,7 +11,7 @@ public class DatabaseHandler {
         return DriverManager.getConnection(URL, USER, PASS);
     }
 
-    // 1. ADD VEHICLE (Updated with new fields)
+    // 1. ADD VEHICLE (CREATE)
     public String addVehicle(String plate, String owner, String type, double baseFine, double dailyFee, 
                              String phone, String email, String address, String license, String desc) {
         try (Connection conn = connect()) {
@@ -33,7 +33,6 @@ public class DatabaseHandler {
             stmt.setString(3, type);
             stmt.setDouble(4, baseFine);
             stmt.setDouble(5, dailyFee);
-            // New Fields
             stmt.setString(6, phone);
             stmt.setString(7, email);
             stmt.setString(8, address);
@@ -46,7 +45,7 @@ public class DatabaseHandler {
         } catch (SQLException e) { return "Error: " + e.getMessage(); }
     }
 
-    // 2. RELEASE VEHICLE (Updated to copy new fields to history)
+    // 2. RELEASE VEHICLE (DELETE)
     public String releaseVehicle(int id) {
         try (Connection conn = connect()) {
             String query = "SELECT *, GREATEST(DATEDIFF(NOW(), date_impounded), 1) as days_calculated FROM active_lot WHERE id = ?";
@@ -55,12 +54,10 @@ public class DatabaseHandler {
             ResultSet rs = get.executeQuery();
             
             if (rs.next()) {
-                // Get Calculations
                 String plate = rs.getString("plate_number");
                 String owner = rs.getString("owner_name");
                 double total = rs.getDouble("base_fine") + (rs.getInt("days_calculated") * rs.getDouble("daily_fee"));
                 
-                // Copy to History
                 String copy = "INSERT INTO history_log (plate_number, owner_name, vehicle_type, days_held, total_paid, " +
                               "phone_number, email, address, license_number, violation_desc) " +
                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -71,7 +68,6 @@ public class DatabaseHandler {
                 hist.setString(3, rs.getString("vehicle_type"));
                 hist.setInt(4, rs.getInt("days_calculated"));
                 hist.setDouble(5, total);
-                // Copy New Fields
                 hist.setString(6, rs.getString("phone_number"));
                 hist.setString(7, rs.getString("email"));
                 hist.setString(8, rs.getString("address"));
@@ -80,7 +76,6 @@ public class DatabaseHandler {
                 
                 hist.executeUpdate();
 
-                // Delete from Active (Using Secure Statement)
                 PreparedStatement del = conn.prepareStatement("DELETE FROM active_lot WHERE id = ?");
                 del.setInt(1, id);
                 del.executeUpdate();
@@ -91,7 +86,7 @@ public class DatabaseHandler {
         return "Error: ID not found.";
     }
 
-    // 3. LOAD & SEARCH (No changes needed, SELECT * picks up new columns automatically)
+    // 3. LOAD TABLE (READ)
     public void loadTable(DefaultTableModel model, String tableName) {
         model.setRowCount(0);
         try (Connection conn = connect()) {
@@ -106,6 +101,7 @@ public class DatabaseHandler {
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
+    // 4. SEARCH TABLE (READ)
     public void searchTable(DefaultTableModel model, String tableName, String keyword) {
         model.setRowCount(0);
         try (Connection conn = connect()) {
@@ -122,5 +118,48 @@ public class DatabaseHandler {
                 model.addRow(row);
             }
         } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    // 5. UPDATE VEHICLE INFO (UPDATE) - NEW METHOD FOR COMPLETE CRUD
+    public String updateVehicle(int id, String phone, String email, String address) {
+        try (Connection conn = connect()) {
+            String sql = "UPDATE active_lot SET phone_number = ?, email = ?, address = ? WHERE id = ?";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, phone);
+            stmt.setString(2, email);
+            stmt.setString(3, address);
+            stmt.setInt(4, id);
+            
+            int rowsAffected = stmt.executeUpdate();
+            
+            if (rowsAffected > 0) {
+                return "Success: Vehicle information updated!";
+            } else {
+                return "Error: Vehicle ID not found!";
+            }
+        } catch (SQLException e) {
+            return "Error: " + e.getMessage();
+        }
+    }
+
+    // 6. UPDATE FEES (UPDATE) - Additional UPDATE method
+    public String updateVehicleFees(int id, double baseFine, double dailyFee) {
+        try (Connection conn = connect()) {
+            String sql = "UPDATE active_lot SET base_fine = ?, daily_fee = ? WHERE id = ?";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setDouble(1, baseFine);
+            stmt.setDouble(2, dailyFee);
+            stmt.setInt(3, id);
+            
+            int rowsAffected = stmt.executeUpdate();
+            
+            if (rowsAffected > 0) {
+                return "Success: Fees updated successfully!";
+            } else {
+                return "Error: Vehicle ID not found!";
+            }
+        } catch (SQLException e) {
+            return "Error: " + e.getMessage();
+        }
     }
 }
